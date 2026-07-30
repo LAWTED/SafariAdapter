@@ -4,6 +4,7 @@ set -euo pipefail
 
 PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
 VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$PROJECT_DIR/Info.plist")"
+SIGNING_IDENTITY="${SIGNING_IDENTITY:--}"
 APP_DIR="$PROJECT_DIR/dist/SafariAdapter.app"
 RELEASE_DIR="$PROJECT_DIR/release"
 ZIP_PATH="$RELEASE_DIR/SafariAdapter-$VERSION.zip"
