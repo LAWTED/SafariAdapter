@@ -1,10 +1,10 @@
 # SafariAdapter
 
-给 Safari 加上一条接近 Arc 的原生命令栏：按 `⌘L` 在页面中央查看或输入地址，按 `⌘S` 切换 Safari 侧边栏。
+给 Safari 加上一条接近 Arc 的原生命令栏：按 `⌘L` 在页面中央查看或输入地址、搜索已打开的标签页和本地历史。
 
 ## 下载
 
-不懂代码也没关系，直接打开 [最新版下载页](https://github.com/LAWTED/SafariAdapter/releases/latest)，下载 `SafariAdapter-0.2.8.dmg`。
+不懂代码也没关系，直接打开 [最新版下载页](https://github.com/LAWTED/SafariAdapter/releases/latest)，下载 `SafariAdapter-0.3.0.dmg`。
 
 ## 三步安装
 
@@ -22,16 +22,33 @@
 | `Return` | 在当前标签页打开输入的网址或搜索内容 |
 | `⌘Return` | 新建标签页、切换过去并打开输入内容 |
 | `Escape` | 关闭地址栏 |
-| `⌘S` | 切换 Safari 原生侧边栏 |
 | `⌘1`…`⌘9` | 切换 Safari 标签页 |
+| `⌘⇧C` | 复制当前网址 |
+| `⌘⌥⇧C` | 复制当前页面的 Markdown 链接 |
 
 只有 Safari 位于最前面时，这些快捷键才会被 SafariAdapter 接管。
 
+切换侧边栏请点击菜单栏图标里的 `Toggle Safari Sidebar`。0.3.0 起不再占用 `⌘S`：这个键在 Safari 里本来是“存储页面”，只要接管出现一点空隙就会弹出存储对话框。
+
 ## 输入规则
 
+- 输入至少两个字符后，会依次匹配当前 Safari 窗口中已经打开的标签页和 SafariAdapter 的本地历史；使用上下键选择，按 `Return` 打开。
+- 已打开的标签页永远排在历史记录前面，同一个网址不会重复出现。
 - 完整网址会直接打开。
 - 类似 `github.com` 的域名会自动补上 `https://`。
 - 普通文字会使用 Google 搜索。
+
+## 搜索别名
+
+| 输入 | 搜索位置 |
+| --- | --- |
+| `g liquid glass` | Google |
+| `gh safari adapter` | GitHub |
+| `yt swift tutorial` | YouTube |
+| `x openai` | X |
+| `maps coffee` | Google Maps |
+
+识别到别名时，输入框右侧会显示目标网站；按 `Return` 在当前标签页搜索，按 `⌘Return` 在新标签页搜索。
 
 ## 系统要求
 
@@ -63,7 +80,15 @@ open dist/SafariAdapter.app
 - “辅助功能”：定位 Safari 窗口，以及按下 Safari 自己的侧边栏按钮。
 - “自动化 → Safari”：读取当前网址、切换标签页和打开网址。
 
+如果没有授予“自动化 → Safari”，命令栏会打不开当前网址；这时 SafariAdapter 会直接提示你，并可以一键跳转到对应的系统设置面板。
+
 SafariAdapter 不上传浏览记录，也不包含网络服务或分析 SDK。
+
+## 本地历史
+
+SafariAdapter 只记录安装本版本后、在 Safari 前台稳定停留过的网页。记录保存在本机的 Application Support 文件夹，不读取 Safari 的私有历史数据库，也不需要“完全磁盘访问”。
+
+点击菜单栏里的 SafariAdapter 图标，可以随时选择 `Pause Local History` 暂停记录，或选择 `Clear Local History…` 清空 SafariAdapter 保存的记录；这两项操作都不会影响 Safari 自己的历史记录。使用 Safari 私密浏览时，如果不希望页面出现在命令栏结果中，请先暂停本地历史。
 
 ## License
 

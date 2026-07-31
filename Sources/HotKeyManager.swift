@@ -4,11 +4,15 @@ import Foundation
 /// Registers Safari-style command shortcuts only while Safari (or the command
 /// bar itself) is frontmost. Carbon hotkeys reliably override Safari's own menu
 /// equivalents without requiring Input Monitoring permission.
+///
+/// Command-S is deliberately left to Safari: overriding it shadowed "Save
+/// Page As…", and any gap in registration surfaced the save dialog instead.
 @MainActor
 final class HotKeyManager {
     private enum HotKeyID: UInt32 {
         case commandBar = 1
-        case sidebar = 2
+        case copyURL = 3
+        case copyMarkdown = 4
     }
 
     private static let tabHotKeyBase: UInt32 = 100
@@ -25,23 +29,30 @@ final class HotKeyManager {
     ]
 
     private let openCommandBar: () -> Void
-    private let toggleSidebar: () -> Void
     private let selectTab: (Int) -> Void
+    private let copyCurrentAddress: (Bool) -> Void
+    /// Called once when Command-L itself cannot be claimed, so the app can say
+    /// so instead of looking like it silently ignored the keystroke.
+    private let reportCommandBarUnavailable: (OSStatus) -> Void
     private var commandBarRef: EventHotKeyRef?
-    private var sidebarRef: EventHotKeyRef?
+    private var copyURLRef: EventHotKeyRef?
+    private var copyMarkdownRef: EventHotKeyRef?
     private var tabRefs: [EventHotKeyRef] = []
     private var eventHandler: EventHandlerRef?
     private var isRegistered = false
+    private var hasReportedCommandBarFailure = false
     private var pressedHotKeys = Set<UInt32>()
 
     init(
         openCommandBar: @escaping () -> Void,
-        toggleSidebar: @escaping () -> Void,
-        selectTab: @escaping (Int) -> Void
+        selectTab: @escaping (Int) -> Void,
+        copyCurrentAddress: @escaping (Bool) -> Void,
+        reportCommandBarUnavailable: @escaping (OSStatus) -> Void
     ) {
         self.openCommandBar = openCommandBar
-        self.toggleSidebar = toggleSidebar
         self.selectTab = selectTab
+        self.copyCurrentAddress = copyCurrentAddress
+        self.reportCommandBarUnavailable = reportCommandBarUnavailable
         installEventHandler()
     }
 
@@ -56,7 +67,11 @@ final class HotKeyManager {
 
         let signature = OSType(0x53464144) // "SFAD"
         let commandID = EventHotKeyID(signature: signature, id: HotKeyID.commandBar.rawValue)
-        let sidebarID = EventHotKeyID(signature: signature, id: HotKeyID.sidebar.rawValue)
+        let copyURLID = EventHotKeyID(signature: signature, id: HotKeyID.copyURL.rawValue)
+        let copyMarkdownID = EventHotKeyID(
+            signature: signature,
+            id: HotKeyID.copyMarkdown.rawValue
+        )
 
         let commandStatus = RegisterEventHotKey(
             UInt32(kVK_ANSI_L),
@@ -66,13 +81,21 @@ final class HotKeyManager {
             0,
             &commandBarRef
         )
-        let sidebarStatus = RegisterEventHotKey(
-            UInt32(kVK_ANSI_S),
-            UInt32(cmdKey),
-            sidebarID,
+        let copyURLStatus = RegisterEventHotKey(
+            UInt32(kVK_ANSI_C),
+            UInt32(cmdKey | shiftKey),
+            copyURLID,
             GetApplicationEventTarget(),
             0,
-            &sidebarRef
+            &copyURLRef
+        )
+        let copyMarkdownStatus = RegisterEventHotKey(
+            UInt32(kVK_ANSI_C),
+            UInt32(cmdKey | shiftKey | optionKey),
+            copyMarkdownID,
+            GetApplicationEventTarget(),
+            0,
+            &copyMarkdownRef
         )
 
         var tabStatuses: [OSStatus] = []
@@ -95,21 +118,38 @@ final class HotKeyManager {
         }
 
         NSLog(
-            "SafariAdapter hotkeys registered — Command-L: %d, Command-S: %d, Command-1…9: %@",
+            "SafariAdapter hotkeys registered — Command-L: %d, Copy URL: %d, Copy Markdown: %d, Command-1…9: %@",
             commandStatus,
-            sidebarStatus,
+            copyURLStatus,
+            copyMarkdownStatus,
             tabStatuses.map(String.init).joined(separator: ",")
         )
-        isRegistered = commandStatus == noErr || sidebarStatus == noErr || tabStatuses.contains(noErr)
+
+        // A partial failure used to leave `isRegistered` true, so a dead
+        // Command-L looked identical to a healthy one. Losing the command bar
+        // is the one failure the user has to hear about.
+        if commandStatus != noErr {
+            commandBarRef = nil
+            if !hasReportedCommandBarFailure {
+                hasReportedCommandBarFailure = true
+                reportCommandBarUnavailable(commandStatus)
+            }
+        }
+
+        // Registration is retried the next time Safari comes forward, because
+        // `unregister()` clears this flag when Safari resigns.
+        isRegistered = true
     }
 
     func unregister() {
         guard isRegistered else { return }
         if let commandBarRef { UnregisterEventHotKey(commandBarRef) }
-        if let sidebarRef { UnregisterEventHotKey(sidebarRef) }
+        if let copyURLRef { UnregisterEventHotKey(copyURLRef) }
+        if let copyMarkdownRef { UnregisterEventHotKey(copyMarkdownRef) }
         tabRefs.forEach { UnregisterEventHotKey($0) }
         commandBarRef = nil
-        sidebarRef = nil
+        copyURLRef = nil
+        copyMarkdownRef = nil
         tabRefs.removeAll()
         pressedHotKeys.removeAll()
         isRegistered = false
@@ -172,8 +212,10 @@ final class HotKeyManager {
         switch id {
         case HotKeyID.commandBar.rawValue:
             openCommandBar()
-        case HotKeyID.sidebar.rawValue:
-            toggleSidebar()
+        case HotKeyID.copyURL.rawValue:
+            copyCurrentAddress(false)
+        case HotKeyID.copyMarkdown.rawValue:
+            copyCurrentAddress(true)
         case Self.tabHotKeyBase..<(Self.tabHotKeyBase + UInt32(Self.tabKeyCodes.count)):
             selectTab(Int(id - Self.tabHotKeyBase) + 1)
         default:
