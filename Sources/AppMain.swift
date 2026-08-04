@@ -33,7 +33,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let copyToast = CopyToastController()
     private lazy var hotKeys = HotKeyManager(
         openCommandBar: { [weak self] in self?.openCommandBar() },
-        toggleSidebar: { [weak self] in self?.toggleSidebar() },
         selectTab: { [weak self] index in self?.selectTab(index: index) },
         copyCurrentAddress: { [weak self] asMarkdown in
             self?.copyCurrentAddress(asMarkdown: asMarkdown)
@@ -230,11 +229,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func openCommandBar() {
         overlay.present()
-    }
-
-    private func toggleSidebar() {
-        overlay.dismiss(returnFocusToSafari: false)
-        SidebarController.toggleSafariSidebar()
     }
 
     private func selectTab(index: Int) {
