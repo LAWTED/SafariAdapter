@@ -1,6 +1,6 @@
 # SafariAdapter
 
-给 Safari 加上一条接近 Arc 的原生命令栏：按 `⌘L` 在页面中央查看或输入地址、搜索已打开的标签页和本地历史。
+给 Safari 加上一条接近 Arc 的原生命令栏：按 `⌘L` 在页面中央查看或输入地址、搜索已打开的标签页和本地历史，按 `⌘S` 切换 Safari 侧边栏。
 
 ## 下载
 
@@ -12,13 +12,14 @@
 2. 在“应用程序”里双击 `SafariAdapter`。
 3. 按系统提示允许“辅助功能”和“自动化 → Safari”。然后打开 Safari，按 `⌘L`。
 
-更细的图文式说明见 [INSTALL.md](INSTALL.md)。SafariAdapter 是菜单栏应用，不会显示普通窗口，也不会出现在 Dock；看到菜单栏里的图标就代表它正在运行。
+更细的图文式说明见 [INSTALL.md](INSTALL.md)。SafariAdapter 是纯后台辅助程序，不显示普通窗口、不出现在 Dock，也不会占用菜单栏；切到 Safari 后按 `⌘L` 就能确认它正在运行。
 
 ## 快捷键
 
 | 快捷键 | 作用 |
 | --- | --- |
 | `⌘L` | 打开/关闭中央地址栏，并显示当前网址 |
+| `⌘S` | 打开/关闭 Safari 原生侧边栏 |
 | `Return` | 在当前标签页打开输入的网址或搜索内容 |
 | `⌘Return` | 新建标签页、切换过去并打开输入内容 |
 | `Escape` | 关闭地址栏 |
@@ -28,7 +29,7 @@
 
 只有 Safari 位于最前面时，这些快捷键才会被 SafariAdapter 接管。
 
-切换侧边栏请点击菜单栏图标里的 `Toggle Safari Sidebar`。0.3.0 起不再占用 `⌘S`：这个键在 Safari 里本来是“存储页面”，只要接管出现一点空隙就会弹出存储对话框。
+`⌘S` 只在 Safari 位于最前面时由 SafariAdapter 接管，用来切换 Safari 原生侧边栏；不会打开“存储页面”对话框。
 
 ## 输入规则
 
@@ -88,7 +89,7 @@ SafariAdapter 不上传浏览记录，也不包含网络服务或分析 SDK。
 
 SafariAdapter 只记录安装本版本后、在 Safari 前台稳定停留过的网页。记录保存在本机的 Application Support 文件夹，不读取 Safari 的私有历史数据库，也不需要“完全磁盘访问”。
 
-点击菜单栏里的 SafariAdapter 图标，可以随时选择 `Pause Local History` 暂停记录，或选择 `Clear Local History…` 清空 SafariAdapter 保存的记录；这两项操作都不会影响 Safari 自己的历史记录。使用 Safari 私密浏览时，如果不希望页面出现在命令栏结果中，请先暂停本地历史。
+SafariAdapter 不显示菜单栏图标。如果需要暂停本地历史，在“终端”运行 `defaults write com.ha7ch.SafariAdapter localHistoryEnabled -bool false`，再重新打开 SafariAdapter；把最后的 `false` 改成 `true` 可以恢复记录。清理记录时，在 Finder 中选择“前往 → 前往文件夹”，打开 `~/Library/Application Support/SafariAdapter/`，把 `history.json` 移到废纸篓。这些操作都不会影响 Safari 自己的历史记录。
 
 ## License
 

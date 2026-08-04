@@ -33,6 +33,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let copyToast = CopyToastController()
     private lazy var hotKeys = HotKeyManager(
         openCommandBar: { [weak self] in self?.openCommandBar() },
+        toggleSidebar: { [weak self] in self?.toggleSidebar() },
         selectTab: { [weak self] index in self?.selectTab(index: index) },
         copyCurrentAddress: { [weak self] asMarkdown in
             self?.copyCurrentAddress(asMarkdown: asMarkdown)
@@ -42,8 +43,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     )
 
-    private var statusItem: NSStatusItem?
-    private var materialMenu: NSMenu?
     private var activationObserver: NSObjectProtocol?
     private var frontmostPollTimer: Timer?
     private var historyPollTimer: Timer?
@@ -56,7 +55,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        configureStatusItem()
         SafariScriptRunner.onAutomationPermissionDenied = { [weak self] in
             self?.presentAutomationPermissionAlert()
         }
@@ -230,154 +228,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func configureStatusItem() {
-        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        item.button?.image = NSImage(
-            systemSymbolName: "rectangle.and.text.magnifyingglass",
-            accessibilityDescription: "SafariAdapter"
-        )
-        item.button?.toolTip = "SafariAdapter"
-
-        let menu = NSMenu()
-        let openItem = NSMenuItem(
-            title: "Open Command Bar",
-            action: #selector(openFromMenu),
-            keyEquivalent: ""
-        )
-        openItem.target = self
-        menu.addItem(openItem)
-
-        let sidebarItem = NSMenuItem(
-            title: "Toggle Safari Sidebar",
-            action: #selector(toggleFromMenu),
-            keyEquivalent: ""
-        )
-        sidebarItem.target = self
-        menu.addItem(sidebarItem)
-
-        let copyURLItem = NSMenuItem(
-            title: "Copy Current Address",
-            action: #selector(copyURLFromMenu),
-            keyEquivalent: ""
-        )
-        copyURLItem.target = self
-        menu.addItem(copyURLItem)
-
-        let copyMarkdownItem = NSMenuItem(
-            title: "Copy as Markdown Link",
-            action: #selector(copyMarkdownFromMenu),
-            keyEquivalent: ""
-        )
-        copyMarkdownItem.target = self
-        menu.addItem(copyMarkdownItem)
-        menu.addItem(.separator())
-
-        let pauseHistoryItem = NSMenuItem(
-            title: "Pause Local History",
-            action: #selector(toggleLocalHistory(_:)),
-            keyEquivalent: ""
-        )
-        pauseHistoryItem.target = self
-        pauseHistoryItem.state = historyStore.isEnabled ? .off : .on
-        menu.addItem(pauseHistoryItem)
-        let clearHistoryItem = NSMenuItem(
-            title: "Clear Local History…",
-            action: #selector(clearLocalHistory),
-            keyEquivalent: ""
-        )
-        clearHistoryItem.target = self
-        menu.addItem(clearHistoryItem)
-        menu.addItem(.separator())
-
-        let materialItem = NSMenuItem(
-            title: "Command Bar Material",
-            action: nil,
-            keyEquivalent: ""
-        )
-        let materialMenu = NSMenu(title: "Command Bar Material")
-        for material in CommandBarMaterial.allCases {
-            let item = NSMenuItem(
-                title: material.title,
-                action: #selector(changeMaterial(_:)),
-                keyEquivalent: ""
-            )
-            item.target = self
-            item.representedObject = material.rawValue
-            item.state = material == selectedMaterial ? .on : .off
-            materialMenu.addItem(item)
-        }
-        materialItem.submenu = materialMenu
-        menu.addItem(materialItem)
-        menu.addItem(.separator())
-
-        let quitItem = NSMenuItem(
-            title: "Quit SafariAdapter",
-            action: #selector(NSApplication.terminate(_:)),
-            keyEquivalent: "q"
-        )
-        menu.addItem(quitItem)
-        item.menu = menu
-        statusItem = item
-        self.materialMenu = materialMenu
-    }
-
-    @objc private func openFromMenu() {
-        safari.activateSafari()
-        openCommandBar()
-    }
-
-    @objc private func toggleFromMenu() {
-        safari.activateSafari()
-        toggleSidebar()
-    }
-
-    @objc private func copyURLFromMenu() {
-        safari.activateSafari()
-        copyCurrentAddress(asMarkdown: false)
-    }
-
-    @objc private func copyMarkdownFromMenu() {
-        safari.activateSafari()
-        copyCurrentAddress(asMarkdown: true)
-    }
-
-    @objc private func changeMaterial(_ sender: NSMenuItem) {
-        guard
-            let rawValue = sender.representedObject as? String,
-            let material = CommandBarMaterial(rawValue: rawValue)
-        else { return }
-
-        selectedMaterial = material
-        UserDefaults.standard.set(material.rawValue, forKey: "commandBarMaterial")
-        for item in materialMenu?.items ?? [] {
-            item.state = (item.representedObject as? String) == material.rawValue ? .on : .off
-        }
-        overlay.dismiss(returnFocusToSafari: false)
-    }
-
-    @objc private func toggleLocalHistory(_ sender: NSMenuItem) {
-        let enabled = !historyStore.isEnabled
-        historyStore.setEnabled(enabled)
-        sender.state = enabled ? .off : .on
-        if !enabled {
-            pendingHistoryPage = nil
-            lastCommittedHistoryURL = nil
-        }
-    }
-
-    @objc private func clearLocalHistory() {
-        let alert = NSAlert()
-        alert.messageText = "Clear Local History?"
-        alert.informativeText = "This permanently removes pages recorded by SafariAdapter. Safari’s own history is not affected."
-        alert.alertStyle = .warning
-        alert.addButton(withTitle: "Clear")
-        alert.addButton(withTitle: "Cancel")
-        guard alert.runModal() == .alertFirstButtonReturn else { return }
-        historyStore.clear()
-        pendingHistoryPage = nil
-        lastCommittedHistoryURL = nil
-    }
-
     private func openCommandBar() {
         overlay.present()
     }
@@ -431,8 +281,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         could not claim it (error \(status)).
 
         Quit whichever app registered it, then switch back to Safari — \
-        SafariAdapter retries every time Safari comes forward. You can also \
-        open the command bar from the menu bar icon.
+        SafariAdapter retries every time Safari comes forward.
         """
         alert.alertStyle = .warning
         alert.addButton(withTitle: "OK")
