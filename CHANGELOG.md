@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- 隐藏菜单栏图标，SafariAdapter 改为不占 Dock 和菜单栏的纯后台辅助程序。
+- 清理已经失效的菜单栏菜单与提示文案。
+
 ## 0.3.0
 
 - 在 `Command-L` 中搜索当前 Safari 窗口已经打开的标签页。

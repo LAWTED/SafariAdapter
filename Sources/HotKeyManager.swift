@@ -4,9 +4,6 @@ import Foundation
 /// Registers Safari-style command shortcuts only while Safari (or the command
 /// bar itself) is frontmost. Carbon hotkeys reliably override Safari's own menu
 /// equivalents without requiring Input Monitoring permission.
-///
-/// Command-S is deliberately left to Safari: overriding it shadowed "Save
-/// Page As…", and any gap in registration surfaced the save dialog instead.
 @MainActor
 final class HotKeyManager {
     private enum HotKeyID: UInt32 {
