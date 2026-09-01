@@ -24,6 +24,13 @@ struct CommandBarSmoke {
                 url: "https://developer.apple.com/documentation/safariservices",
                 lastVisited: Date().addingTimeInterval(-60),
                 visitCount: 3
+            ),
+            HistoryEntry(
+                id: HistoryStore.canonicalURL(for: "https://microsoft.ai/careers/")!,
+                title: "Microsoft AI Careers",
+                url: "https://microsoft.ai/careers/",
+                lastVisited: Date().addingTimeInterval(-120),
+                visitCount: 2
             )
         ]
 
@@ -39,23 +46,78 @@ struct CommandBarSmoke {
             layoutChanged: { _ in }
         )
 
+        // The typed intent is always the first and selected result. Matching
+        // tabs and history stay available below it without hijacking Return.
         model.textDidChange("SafariAdapter")
-        precondition(model.results == [.openTab(openGitHub)])
+        guard case .action(let googleAction)? = model.results.first else {
+            preconditionFailure("Expected Google search as the primary action")
+        }
+        precondition(googleAction.kind == .search(engine: "Google", query: "SafariAdapter"))
+        precondition(model.results.dropFirst().first == .openTab(openGitHub))
+        precondition(model.selectedResultIndex == 0)
+        model.submit(opensInNewTab: false)
+        precondition(activatedTab == nil)
+        precondition(navigations.last?.0.contains("google.com/search") == true)
+        precondition(navigations.last?.0.contains("q=SafariAdapter") == true)
+        precondition(navigations.last?.1 == false)
+
+        model.moveSelection(by: 1)
         model.submit(opensInNewTab: false)
         precondition(activatedTab == openGitHub)
 
-        model.submit(opensInNewTab: true)
-        precondition(navigations.last?.0 == openGitHub.url)
-        precondition(navigations.last?.1 == true)
-
         model.textDidChange("Safari Services")
-        guard case .history(let matchedHistory)? = model.results.first else {
+        guard case .action(let historyQueryAction)? = model.results.first else {
+            preconditionFailure("Expected Google search before history")
+        }
+        precondition(
+            historyQueryAction.kind == .search(engine: "Google", query: "Safari Services")
+        )
+        guard case .history(let matchedHistory)? = model.results.dropFirst().first else {
             preconditionFailure("Expected a history result")
         }
         precondition(matchedHistory.url.contains("developer.apple.com"))
         model.submit(opensInNewTab: false)
+        precondition(navigations.last?.0.contains("google.com/search") == true)
+        precondition(navigations.last?.0.contains("Safari%20Services") == true)
+
+        model.moveSelection(by: 1)
+        model.submit(opensInNewTab: false)
         precondition(navigations.last?.0 == matchedHistory.url)
         precondition(navigations.last?.1 == false)
+
+        // A bare domain opens that domain. A deeper history match is secondary.
+        model.textDidChange("microsoft.ai")
+        guard case .action(let bareDomainAction)? = model.results.first else {
+            preconditionFailure("Expected direct navigation for a bare domain")
+        }
+        precondition(bareDomainAction.kind == .open)
+        precondition(bareDomainAction.url.absoluteString == "https://microsoft.ai")
+        guard case .history(let careers)? = model.results.dropFirst().first else {
+            preconditionFailure("Expected the careers page as a secondary history result")
+        }
+        precondition(careers.url == "https://microsoft.ai/careers/")
+        model.submit(opensInNewTab: false)
+        precondition(navigations.last?.0 == "https://microsoft.ai")
+
+        // An exact URL never gets duplicated by the same history entry.
+        model.textDidChange("https://microsoft.ai/careers/")
+        precondition(model.results.count == 1)
+        guard case .action(let exactURLAction)? = model.results.first else {
+            preconditionFailure("Expected direct navigation for an exact URL")
+        }
+        precondition(exactURLAction.url.absoluteString == "https://microsoft.ai/careers/")
+
+        // Even an already-open exact URL keeps navigation as the default; the
+        // existing tab becomes an explicit secondary choice.
+        model.textDidChange(openGitHub.url)
+        guard case .action(let openURLAction)? = model.results.first else {
+            preconditionFailure("Expected direct navigation before an open tab")
+        }
+        precondition(openURLAction.url.absoluteString == openGitHub.url)
+        precondition(model.results.dropFirst().first == .openTab(openGitHub))
+        model.submit(opensInNewTab: true)
+        precondition(navigations.last?.0 == openGitHub.url)
+        precondition(navigations.last?.1 == true)
 
         let normalized = HistoryStore.canonicalURL(
             for: "HTTPS://Example.com/page?utm_source=test&id=7#section"
@@ -77,6 +139,15 @@ struct CommandBarSmoke {
             )
         }
         precondition(DestinationParser.destination(for: "   ") == nil)
+        precondition(
+            DestinationParser.resolution(for: "hello world")?.kind
+                == .search(engine: "Google", query: "hello world")
+        )
+        precondition(DestinationParser.resolution(for: "github.com")?.kind == .open)
+        precondition(
+            DestinationParser.resolution(for: "gh safari adapter")?.kind
+                == .search(engine: "GitHub", query: "safari adapter")
+        )
 
         // Loopback must not be forced onto https, and must not be mistaken for
         // a URL whose scheme is "localhost".
