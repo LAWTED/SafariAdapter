@@ -268,6 +268,39 @@ enum ClipboardFormatter {
     }
 }
 
+enum DestinationKind: Equatable {
+    case open
+    case search(engine: String, query: String)
+}
+
+struct DestinationResolution: Equatable {
+    let input: String
+    let url: URL
+    let kind: DestinationKind
+
+    var title: String {
+        switch kind {
+        case .open: "Open"
+        case .search(let engine, _): "Search \(engine)"
+        }
+    }
+
+    var detail: String {
+        switch kind {
+        case .open:
+            var value = url.absoluteString
+            if value.hasPrefix("https://") { value.removeFirst("https://".count) }
+            if value.hasPrefix("http://") { value.removeFirst("http://".count) }
+            if value.hasSuffix("/"), url.path == "/", url.query == nil {
+                value.removeLast()
+            }
+            return value
+        case .search(_, let query):
+            return query
+        }
+    }
+}
+
 enum DestinationParser {
     /// Schemes Safari can actually open. This list matters: `URL(string:)`
     /// happily reads "localhost:3000" as scheme "localhost", and handing that
@@ -283,19 +316,37 @@ enum DestinationParser {
     /// own "can't find the server" page. Doing nothing is the one outcome the
     /// user can neither see nor act on.
     static func destination(for rawInput: String) -> URL? {
+        resolution(for: rawInput)?.url
+    }
+
+    /// Describes the user's primary intent as well as its final URL, so the
+    /// command bar can make that action visible instead of letting history
+    /// suggestions look like the default behavior.
+    static func resolution(for rawInput: String) -> DestinationResolution? {
         let input = rawInput.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !input.isEmpty else { return nil }
 
         if let match = SearchShortcut.matching(input) {
-            return match.shortcut.destination(for: match.query) ?? searchURL(for: input)
+            let destination = match.shortcut.destination(for: match.query)
+                ?? searchURL(for: input)
+            guard let destination else { return nil }
+            let kind: DestinationKind = match.query.isEmpty
+                ? .open
+                : .search(engine: match.shortcut.name, query: match.query)
+            return DestinationResolution(input: input, url: destination, kind: kind)
         }
         if let explicit = explicitURL(for: input) {
-            return explicit
+            return DestinationResolution(input: input, url: explicit, kind: .open)
         }
         if let host = hostURL(for: input) {
-            return host
+            return DestinationResolution(input: input, url: host, kind: .open)
         }
-        return searchURL(for: input)
+        guard let searchURL = searchURL(for: input) else { return nil }
+        return DestinationResolution(
+            input: input,
+            url: searchURL,
+            kind: .search(engine: "Google", query: input)
+        )
     }
 
     private static func explicitURL(for input: String) -> URL? {

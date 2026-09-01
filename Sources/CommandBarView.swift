@@ -17,11 +17,13 @@ enum CommandBarMaterial: String, CaseIterable, Hashable {
 }
 
 enum CommandResult: Identifiable, Equatable {
+    case action(DestinationResolution)
     case openTab(SafariTab)
     case history(HistoryEntry)
 
     var id: String {
         switch self {
+        case .action(let action): "action:\(action.url.absoluteString)"
         case .openTab(let tab): "tab:\(tab.id)"
         case .history(let entry): "history:\(entry.id)"
         }
@@ -29,6 +31,7 @@ enum CommandResult: Identifiable, Equatable {
 
     var title: String {
         switch self {
+        case .action(let action): action.title
         case .openTab(let tab): tab.title
         case .history(let entry): entry.title
         }
@@ -36,13 +39,19 @@ enum CommandResult: Identifiable, Equatable {
 
     var url: String {
         switch self {
+        case .action(let action): action.url.absoluteString
         case .openTab(let tab): tab.url
         case .history(let entry): entry.url
         }
     }
 
-    var host: String {
-        URL(string: url)?.host?.replacingOccurrences(of: "www.", with: "") ?? url
+    var detail: String {
+        switch self {
+        case .action(let action): return action.detail
+        case .openTab, .history:
+            return URL(string: url)?.host?.replacingOccurrences(of: "www.", with: "")
+                ?? url
+        }
     }
 }
 
@@ -138,6 +147,8 @@ final class CommandBarModel: ObservableObject {
         }
 
         switch selectedResult {
+        case .action(let action):
+            navigate(action.url.absoluteString, opensInNewTab)
         case .openTab(let tab) where !opensInNewTab:
             activateTab(tab)
         case .openTab(let tab):
@@ -149,6 +160,7 @@ final class CommandBarModel: ObservableObject {
 
     func activate(_ result: CommandResult) {
         switch result {
+        case .action(let action): navigate(action.url.absoluteString, false)
         case .openTab(let tab): activateTab(tab)
         case .history(let entry): navigate(entry.url, false)
         }
@@ -167,13 +179,16 @@ final class CommandBarModel: ObservableObject {
 
     private func refreshResults() {
         let query = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard
-            hasEdited,
-            query.count >= 2,
-            SearchShortcut.matching(query) == nil
-        else {
+        guard hasEdited, let primaryAction = DestinationParser.resolution(for: query) else {
             results = []
             selectedResultIndex = nil
+            return
+        }
+
+        let primaryResult = CommandResult.action(primaryAction)
+        guard query.count >= 2, SearchShortcut.matching(query) == nil else {
+            results = [primaryResult]
+            selectedResultIndex = 0
             return
         }
 
@@ -199,8 +214,9 @@ final class CommandBarModel: ObservableObject {
             }
 
         let openURLs = Set(openTabs.compactMap { HistoryStore.canonicalURL(for: $0.url) })
+        let primaryURL = HistoryStore.canonicalURL(for: primaryAction.url.absoluteString)
         let rankedHistory = historyEntries
-            .filter { !openURLs.contains($0.id) }
+            .filter { !openURLs.contains($0.id) && $0.id != primaryURL }
             .compactMap { entry -> (CommandResult, Int, Date, Int)? in
                 guard let score = matchScore(
                     title: entry.title,
@@ -216,23 +232,10 @@ final class CommandBarModel: ObservableObject {
                 return lhs.2 > rhs.2
             }
 
-        let combined = rankedTabs.map { ($0.0, $0.1) }
-            + rankedHistory.map { ($0.0, $0.1) }
-        let visible = Array(combined.prefix(Self.maximumResults))
-        results = visible.map(\.0)
-
-        guard let first = visible.first else {
-            selectedResultIndex = nil
-            return
-        }
-        switch first.0 {
-        case .openTab:
-            selectedResultIndex = 0
-        case .history:
-            // A loose substring remains available with ↓, but does not hijack
-            // Return away from a normal web search.
-            selectedResultIndex = first.1 <= 2 ? 0 : nil
-        }
+        let suggestions = rankedTabs.map(\.0) + rankedHistory.map(\.0)
+        results = [primaryResult]
+            + Array(suggestions.prefix(Self.maximumResults - 1))
+        selectedResultIndex = 0
     }
 
     private func matchScore(
@@ -408,12 +411,12 @@ private struct CommandResultRow: View {
                 .foregroundStyle(isSelected ? .primary : .secondary)
                 .frame(width: 18)
 
-            Text(result.title.isEmpty ? result.host : result.title)
+            Text(result.title.isEmpty ? result.detail : result.title)
                 .font(.system(size: 13, weight: isSelected ? .medium : .regular))
                 .lineLimit(1)
                 .layoutPriority(1)
 
-            Text(result.host)
+            Text(result.detail)
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
@@ -440,6 +443,11 @@ private struct CommandResultRow: View {
 
     private var resultIcon: String {
         switch result {
+        case .action(let action):
+            switch action.kind {
+            case .open: "arrow.up.right"
+            case .search: "magnifyingglass"
+            }
         case .openTab: "rectangle.stack"
         case .history: "clock.arrow.circlepath"
         }
